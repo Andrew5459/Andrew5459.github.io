@@ -1,0 +1,898 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Galaxian</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            canvas {
+                margin: auto;
+                display: block;
+                width: 400px;
+                height: 600px;
+            }
+            p {
+                text-align: left;
+                font-family: 'Impact';
+                font-size: larger;
+                font-style: oblique;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas" width="400" height="600" tabindex="0"></canvas>
+        <script>
+            // Andrew Clattenburg
+            // Dec 22, 2017
+            // Arcade Style 2D Shooter JavaScript Project
+            function init() {
+                canvas = document.getElementById('canvas');
+                ctx = canvas.getContext('2d');
+                WIDTH = ctx.canvas.width;
+                HEIGHT = ctx.canvas.height;
+                ctx.textAlign = "left";
+                requestAnimationFrame(draw);
+            }
+            // Misc Variables
+            var shake = {move: 0, value: 0};
+            var hSCoolDown = 0;
+            var run = {menu: true, game: false};
+            var opacity = 1;
+            var timer = 0;
+            // Images
+            var logo = new Image();
+            logo.src = "Logo.png";
+            var shipImage = new Image();
+            shipImage.src = "GalagaFighter.png";
+            var backGround = new Image();
+            backGround.src = "SpaceBackground.png";
+            var enemyTexture = new Image();
+            enemyTexture.src = "EnemyTexture.png";
+            var enemyArmourTexture = new Image();
+            enemyArmourTexture.src = "EnemyArmourTexture.png";
+            var healthKit = new Image();
+            healthKit.src = "HealthKit.png";
+            // Music
+            var music = new Audio('HaloWarthogRun.mp3');
+            music.volume = 0.8;
+            var entity = {
+                // Player Variables
+                player: {x: 190, y: 490, health: 100, shoot: false, cooldown: 0, score: 0,
+                    move: {up: false, down: false, left: false, right: false},
+                    projectile: {x: [], y: [], radius: 2}
+                },
+                // Enemy Variables
+                enemies: {randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                    projectiles: {x: [], y: [], radius: 2}
+                },
+                enemy: {x: [], y: [], size: [], health: [], initHealth: [], randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                    armour: {x: [], y: [], size: [], health: [], initHealth: []}
+                },
+                sEnemy: {x: [], y: [], size: [], health: [], initHealth: [], randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                    armour: {x: [], y: [], size: [], health: [], initHealth: []}
+                },
+                // Health kit variables
+                healthKit: {x: [], y: []},
+                // Explosion Variables
+                smallExplosion: {x: [], y: [], size: [], opacity: []},
+                mediumExplosion: {x: [], y: [], size: [], opacity: []},
+                explosion: {x: [], y: [], size: []}
+            };
+            // The default of all variables
+            function defaultValues() {
+                shake = {move: 0, value: 0};
+                hSCoolDown = 0;
+                run = {menu: true, game: false};
+                opacity = 1;
+                timer = 0;
+                entity = {
+                    player: {x: 190, y: 490, health: 100, shoot: false, cooldown: 0, score: 0,
+                        move: {up: false, down: false, left: false, right: false},
+                        projectile: {x: [], y: [], radius: 2}
+                    },
+                    enemies: {randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                        projectiles: {x: [], y: [], radius: 2}
+                    },
+                    enemy: {x: [], y: [], size: [], health: [], initHealth: [], randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                        armour: {x: [], y: [], size: [], health: [], initHealth: []}
+                    },
+                    sEnemy: {x: [], y: [], size: [], health: [], initHealth: [], randPos: 0, randSpawn: 0, spawnCooldown: 0,
+                        armour: {x: [], y: [], size: [], health: [], initHealth: []}
+                    },
+                    healthKit: {x: [], y: []},
+                    smallExplosion: {x: [], y: [], size: [], opacity: []},
+                    mediumExplosion: {x: [], y: [], size: [], opacity: []},
+                    explosion: {x: [], y: [], size: []}
+                };
+            }
+            // Makes the screen shake
+            function rumble() {
+                shake.value++;
+                if (shake.value > 4) {
+                    shake.value = 1;
+                }
+                if (shake.value === 1) {
+                    translate(0, shake.move);
+                    translate(shake.move, 0);
+                } else if (shake.value === 2) {
+                    translate(0, -shake.move);
+                    translate(-shake.move, 0);
+                } else if (shake.value === 3) {
+                    translate(0, shake.move);
+                    translate(-shake.move, 0);
+                } else if (shake.value === 4) {
+                    translate(0, -shake.move);
+                    translate(shake.move, 0);
+                }
+                if (shake.move % 2 === 0) {
+                    translate(0, -1);
+                }
+                shake.move -= 0.5;
+            }
+            // "Stops" audio
+            function stopAudio(audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+            // Used to translate objects
+            function translate(x, y) {
+                ctx.translate(x, y);
+            }
+            // Draws the background
+            function background(r, g, b) {
+                ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+                ctx.beginPath();
+                ctx.rect(0, 0, WIDTH, HEIGHT);
+                ctx.closePath();
+                ctx.fill();
+            }
+            // Changes the fill colour of shapes
+            function fill(r, g, b, a) {
+                ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+            }
+            // Changes the text size
+            function textSize(s) {
+                ctx.font = s + "px Impact";
+            }
+            // Draws text
+            function text(message, x, y) {
+                ctx.fillText(message, x, y);
+            }
+            // Draws a rectangle
+            function rect(x, y, w, h) {
+                ctx.beginPath();
+                ctx.rect(x, y, w, h);
+                ctx.closePath();
+                ctx.fill();
+            }
+            // Draws an ellipse
+            function ellipse(x, y, r) {
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+            // Runs on mouse click
+            function mouseClicked() {
+                if (run.menu) {
+                    music.play();
+                    run.game = true;
+                    run.menu = false;
+                } else if (run.game && entity.player.health <= 0) {
+                    stopAudio(music);
+                    run.menu = true;
+                    run.game = false;
+                    defaultValues();
+                }
+            }
+            // Runs on key down
+            function onKeyDown(evt) {
+                if (evt.keyCode === 87) { // W key
+                    // Move the player up
+                    entity.player.move.up = true;
+                } else if (evt.keyCode === 83) { // S key
+                    // Move the player down
+                    entity.player.move.down = true;
+                } else if (evt.keyCode === 65) { // A key
+                    // Move the player left
+                    entity.player.move.left = true;
+                } else if (evt.keyCode === 68) { // D key
+                    // Move the player right
+                    entity.player.move.right = true;
+                } else if (evt.keyCode === 32) { // Spacebar
+                    // Make the player shoot
+                    entity.player.shoot = true;
+                }
+            }
+            // Runs on key up
+            function onKeyUp(evt) {
+                if (evt.keyCode === 87) { // W key
+                    // Stop moving the player up
+                    entity.player.move.up = false;
+                } else if (evt.keyCode === 83) { // S key
+                    // Stop moving the player down
+                    entity.player.move.down = false;
+                } else if (evt.keyCode === 65) { // A key
+                    // Stop moving the player left
+                    entity.player.move.left = false;
+                } else if (evt.keyCode === 68) { // D key
+                    // Stop moving the player right
+                    entity.player.move.right = false;
+                } else if (evt.keyCode === 32) { // Spacebar
+                    // Stop making the player shoot
+                    entity.player.shoot = false;
+                }
+            }
+            //
+            function movePlayer(moveSpeed) {
+                // Make the player move slower when moving on a diagonal
+                if (entity.player.move.up && (entity.player.move.left || entity.player.move.right) || entity.player.move.down && (entity.player.move.left || entity.player.move.right)) {
+                    moveSpeed *= 0.707106781;
+                }
+                // Move the player up
+                if (entity.player.move.up) {
+                    entity.player.y -= moveSpeed;
+                // Move the player down
+                } else if (entity.player.move.down) {
+                    entity.player.y += moveSpeed;
+                }
+                // Move the player left
+                if (entity.player.move.left) {
+                    entity.player.x -= moveSpeed;
+                // Move the player right
+                } else if (entity.player.move.right) {
+                    entity.player.x += moveSpeed;
+                }
+            }
+            // Load in an enemy
+            function loadEnemy(x, y) {
+                entity.enemy.x.push(x);
+                entity.enemy.y.push(y);
+                entity.enemy.size.push(10);
+                entity.enemy.health.push(5);
+                entity.enemy.initHealth.push(5);
+            }
+            // Load in an enemys armour
+            function loadArmour(x, y) {
+                entity.enemy.armour.x.push(x);
+                entity.enemy.armour.y.push(y);
+                entity.enemy.armour.size.push(10);
+                entity.enemy.armour.health.push(15);
+                entity.enemy.armour.initHealth.push(15);
+            }
+            // Load in a strong enemy
+            function loadSEnemy(x, y) {
+                entity.sEnemy.x.push(x);
+                entity.sEnemy.y.push(y);
+                entity.sEnemy.size.push(10);
+                entity.sEnemy.health.push(17);
+                entity.sEnemy.initHealth.push(17);
+            }
+            // Load in a strong enemys armour
+            function loadSArmour(x, y) {
+                entity.sEnemy.armour.x.push(x);
+                entity.sEnemy.armour.y.push(y);
+                entity.sEnemy.armour.size.push(10);
+                entity.sEnemy.armour.health.push(51);
+                entity.sEnemy.armour.initHealth.push(51);
+            }
+            // Load in an enemys projectile
+            function loadEnemyProjectile(x, y) {
+                entity.enemies.projectiles.x.push(x);
+                entity.enemies.projectiles.y.push(y);
+                var enemyFire = new Audio('EnemyFiring.mp3');
+                enemyFire.volume = 0.7;
+                enemyFire.play();
+            }
+            // Load in a players projectiles
+            function loadProjectile(x, y) {
+                entity.player.projectile.x.push(x);
+                entity.player.projectile.y.push(y);
+            }
+            // Load in a health kit
+            function loadHealthKit(x, y) {
+                entity.healthKit.x.push(x);
+                entity.healthKit.y.push(y);
+            }
+            // Load in a small explosion and play a sound
+            function loadSmallExplosion(x, y) {
+                entity.smallExplosion.x.push(x);
+                entity.smallExplosion.y.push(y);
+                entity.smallExplosion.size.push(0);
+                entity.smallExplosion.opacity.push(1);
+                var hit1 = new Audio('hit1.mp3');
+                if (hSCoolDown <= 0) {
+                    hit1.volume = 0.3;
+                    hit1.play();
+                    hSCoolDown = 1;
+                }
+            }
+            // Load in a medium explosion and play a sound
+            function loadMediumExplosion(x, y) {
+                entity.mediumExplosion.x.push(x);
+                entity.mediumExplosion.y.push(y);
+                entity.mediumExplosion.size.push(0);
+                entity.mediumExplosion.opacity.push(1);
+                var hit2 = new Audio('hit2.mp3');
+                hit2.volume = 0.5;
+                hit2.play();
+            }
+            // Load in an explosion, shake the screen and play a sound
+            function loadExplosion(x, y) {
+                entity.explosion.x.push(x);
+                entity.explosion.y.push(y);
+                entity.explosion.size.push(50);
+                var randNum = Math.floor(Math.random() * 2) + 1;
+                var boom1 = new Audio('boom1.mp3');
+                var boom2 = new Audio('boom2.mp3');
+                if (randNum === 1) {
+                    boom1.play();
+                } else {
+                    boom2.play();
+                }
+                shake.move = 10;
+                shake.value = 0;
+            }
+            // UnLoad an enemy
+            function unLoadEnemy(i) {
+                entity.enemy.x.splice(i, 1);
+                entity.enemy.y.splice(i, 1);
+                entity.enemy.size.splice(i, 1);
+                entity.enemy.health.splice(i, 1);
+                entity.enemy.initHealth.splice(i, 1);
+            }
+            // UnLoad an enemys armour
+            function unLoadArmour(i) {
+                entity.enemy.armour.x.splice(i, 1);
+                entity.enemy.armour.y.splice(i, 1);
+                entity.enemy.armour.size.splice(i, 1);
+                entity.enemy.armour.health.splice(i, 1);
+                entity.enemy.armour.initHealth.splice(i, 1);
+            }
+            // UnLoad a strong enemy
+            function unLoadSEnemy(i) {
+                entity.sEnemy.x.splice(i, 1);
+                entity.sEnemy.y.splice(i, 1);
+                entity.sEnemy.size.splice(i, 1);
+                entity.sEnemy.health.splice(i, 1);
+                entity.sEnemy.initHealth.splice(i, 1);
+            }
+            // UnLoad a strong enemys armour
+            function unLoadSArmour(i) {
+                entity.sEnemy.armour.x.splice(i, 1);
+                entity.sEnemy.armour.y.splice(i, 1);
+                entity.sEnemy.armour.size.splice(i, 1);
+                entity.sEnemy.armour.health.splice(i, 1);
+                entity.sEnemy.armour.initHealth.splice(i, 1);
+            }
+            // UnLoad a players projectile
+            function unLoadProjectile(i) {
+                entity.player.projectile.x.splice(i, 1);
+                entity.player.projectile.y.splice(i, 1);
+            }
+            // UnLoad an enemy projectile
+            function unLoadEnemyProjectile(i) {
+                entity.enemies.projectiles.x.splice(i, 1);
+                entity.enemies.projectiles.y.splice(i, 1);
+            }
+            // UnLoad a health kit
+            function unLoadHealthKit(i) {
+                entity.healthKit.x.splice(i, 1);
+                entity.healthKit.y.splice(i, 1);
+            }
+            // Unload a small explosion
+            function unLoadSmallExplosion(i) {
+                entity.smallExplosion.x.splice(i, 1);
+                entity.smallExplosion.y.splice(i, 1);
+                entity.smallExplosion.size.splice(i, 1);
+                entity.smallExplosion.opacity.splice(i, 1);
+            }
+            // Unload a medium explosion
+            function unLoadMediumExplosion(i) {
+                entity.mediumExplosion.x.splice(i, 1);
+                entity.mediumExplosion.y.splice(i, 1);
+                entity.mediumExplosion.size.splice(i, 1);
+                entity.mediumExplosion.opacity.splice(i, 1);
+            }
+            // Unload an explosion
+            function unLoadExplosion(i) {
+                entity.explosion.x.splice(i, 1);
+                entity.explosion.y.splice(i, 1);
+                entity.explosion.size.splice(i, 1);
+            }
+            // Build an enemy
+            function buildEnemy() {
+                entity.enemies.randPos = Math.floor(Math.random() * 300) + 20;
+                loadArmour(entity.enemies.randPos, -40);
+                loadArmour(entity.enemies.randPos + 20, -40);
+                loadArmour(entity.enemies.randPos + 2, -30);
+                loadArmour(entity.enemies.randPos + 18, -30);
+                loadEnemy(entity.enemies.randPos + 10, -40);
+            }
+            // Build a strong enemy
+            function buildSEnemy() {
+                entity.enemies.randPos = Math.floor(Math.random() * 300) + 20;
+                loadSArmour(entity.enemies.randPos, -40);
+                loadSArmour(entity.enemies.randPos + 20, -40);
+                loadSArmour(entity.enemies.randPos + 2, -30);
+                loadSArmour(entity.enemies.randPos + 18, -30);
+                loadSEnemy(entity.enemies.randPos + 10, -40);
+            }
+            // Spawn an enemy
+            function spawnEnemy() {
+                if (entity.enemies.spawnCooldown <= 0) {
+                    entity.enemies.randSpawn = Math.floor(Math.random() * 10) + 1;
+                    if (entity.enemies.randSpawn % 10 === 0) {
+                        buildSEnemy();
+                    } else {
+                        buildEnemy();
+                    }
+                    entity.enemies.spawnCooldown = 150;// 120
+                }
+                entity.enemies.spawnCooldown--;
+            }
+            // Make the player shoot
+            function shoot(coolDown) {
+                if (entity.player.shoot) {
+                    if (entity.player.cooldown <= 0) {
+                        var laserShot = new Audio('LaserShot.mp3');
+                        laserShot.volume = 0.4;
+                        loadProjectile(entity.player.x + 3, entity.player.y);
+                        loadProjectile(entity.player.x + 12, entity.player.y);
+                        entity.player.y += 1;
+                        entity.player.cooldown = coolDown;
+                        laserShot.play();
+                    }
+                }
+                entity.player.cooldown--;
+            }
+            // Collision detection for all objects
+            function collisionDetection() {
+                // Move the player to the opposing side of the screen if they go out of bounds
+                if (entity.player.x > WIDTH) {
+                    entity.player.x = -10;
+                } else if (entity.player.x < -10) {
+                    entity.player.x = WIDTH;
+                } else if (entity.player.y > HEIGHT) {
+                    entity.player.y = -10;
+                } else if (entity.player.y < -10) {
+                    entity.player.y = HEIGHT;
+                }
+                // Player projectiles
+                for (var i = entity.player.projectile.x.length - 1; i >= 0; i--) {
+                    // Enemies
+                    for (var j = entity.enemy.x.length - 1; j >= 0; j--) {
+                        // Check if a players projectile if colliding with the enemy
+                        if (entity.player.projectile.x[i] >= entity.enemy.x[j] - entity.player.projectile.radius && entity.player.projectile.x[i] <= entity.enemy.x[j] + (entity.enemy.size[j] + entity.player.projectile.radius) && entity.player.projectile.y[i] >= entity.enemy.y[j] - entity.player.projectile.radius && entity.player.projectile.y[i] <= entity.enemy.y[j] + (entity.enemy.size[j] + entity.player.projectile.radius)) {
+                            // Lower the enemys health
+                            entity.enemy.health[j]--;
+                            // Load a small explosion where the projectile hit
+                            loadSmallExplosion(entity.player.projectile.x[i], entity.enemy.y[j] + entity.enemy.size[j]);
+                            // If enemy health is zero
+                            if (entity.enemy.health[j] <= 0) {
+                                // Give the player score
+                                entity.player.score += 15;
+                                // Load an explosion where the enemy was
+                                loadExplosion(entity.enemy.x[j] + entity.enemy.size[j] / 2, entity.enemy.y[j] + entity.enemy.size[j] / 2);
+                                // Unload the enemy
+                                unLoadEnemy(j);
+                            }
+                            // Unload the projectile
+                            unLoadProjectile(i);
+                        }
+                    }
+                    // Enemy armour
+                    for (var j = entity.enemy.armour.x.length - 1; j >= 0; j--) {
+                        // Check if a players projectile if colliding with the enemys armour
+                        if (entity.player.projectile.x[i] >= entity.enemy.armour.x[j] - entity.player.projectile.radius && entity.player.projectile.x[i] <= entity.enemy.armour.x[j] + (entity.enemy.armour.size[j] + entity.player.projectile.radius) && entity.player.projectile.y[i] >= entity.enemy.armour.y[j] - entity.player.projectile.radius && entity.player.projectile.y[i] <= entity.enemy.armour.y[j] + (entity.enemy.armour.size[j] + entity.player.projectile.radius)) {
+                            // Lower the armours health
+                            entity.enemy.armour.health[j]--;
+                            // Load a small explosion where the projectile hit
+                            loadSmallExplosion(entity.player.projectile.x[i], entity.enemy.armour.y[j] + entity.enemy.armour.size[j]);
+                            // If armour health is zero
+                            if (entity.enemy.armour.health[j] <= 0) {
+                                // Give the player score
+                                entity.player.score += 5;
+                                // UnLoad the armour
+                                unLoadArmour(j);
+                            }
+                            // UnLoad the projectile
+                            unLoadProjectile(i);
+                        }
+                    }
+                    // Strong Enemies
+                    for (var j = entity.sEnemy.x.length - 1; j >= 0; j--) {
+                        // Check if a players projectile if colliding with the strong enemy
+                        if (entity.player.projectile.x[i] >= entity.sEnemy.x[j] - entity.player.projectile.radius && entity.player.projectile.x[i] <= entity.sEnemy.x[j] + (entity.sEnemy.size[j] + entity.player.projectile.radius) && entity.player.projectile.y[i] >= entity.sEnemy.y[j] - entity.player.projectile.radius && entity.player.projectile.y[i] <= entity.sEnemy.y[j] + (entity.sEnemy.size[j] + entity.player.projectile.radius)) {
+                            // Lower the strong enemys health
+                            entity.sEnemy.health[j]--;
+                            // Load a small explosion where the projectile hit
+                            loadSmallExplosion(entity.player.projectile.x[i], entity.sEnemy.y[j] + entity.sEnemy.size[j]);
+                            // If the strong enemys health is zero
+                            if (entity.sEnemy.health[j] <= 0) {
+                                // Load a health kit at the position of the enemy
+                                loadHealthKit(entity.sEnemy.x[j] - 2.5, entity.sEnemy.y[j] - 2.5);
+                                // Give the player score
+                                entity.player.score += 20;
+                                // Load an explosion at the position of the enemy
+                                loadExplosion(entity.sEnemy.x[j] + entity.sEnemy.size[j] / 2, entity.sEnemy.y[j] + entity.sEnemy.size[j] / 2);
+                                // UnLoad the enemy
+                                unLoadSEnemy(j);
+                            }
+                            // UnLoad the projectile
+                            unLoadProjectile(i);
+                        }
+                    }
+                    // Strong enemy armour
+                    for (var j = entity.sEnemy.armour.x.length - 1; j >= 0; j--) {
+                        // Check if a players projectile if colliding with the strong enemys armour
+                        if (entity.player.projectile.x[i] >= entity.sEnemy.armour.x[j] - entity.player.projectile.radius && entity.player.projectile.x[i] <= entity.sEnemy.armour.x[j] + (entity.sEnemy.armour.size[j] + entity.player.projectile.radius) && entity.player.projectile.y[i] >= entity.sEnemy.armour.y[j] - entity.player.projectile.radius && entity.player.projectile.y[i] <= entity.sEnemy.armour.y[j] + (entity.sEnemy.armour.size[j] + entity.player.projectile.radius)) {
+                            // Lower the strong enemys armour health
+                            entity.sEnemy.armour.health[j]--;
+                            // Load a small explosion where the projectile hit
+                            loadSmallExplosion(entity.player.projectile.x[i], entity.sEnemy.armour.y[j] + entity.sEnemy.armour.size[j]);
+                            // If the strong enemys armour health is zero
+                            if (entity.sEnemy.armour.health[j] <= 0) {
+                                // Give the player score
+                                entity.player.score += 10;
+                                // UnLoad the armour
+                                unLoadSArmour(j);
+                            }
+                            // UnLoad the projectile
+                            unLoadProjectile(i);
+                        }
+                    }
+                    // If the projectile is out of bounds
+                    if (entity.player.projectile.y[i] < 0) {
+                        // UnLoad the projectile
+                        unLoadProjectile(i);
+                    }
+                }
+                // Enemy projectiles
+                for (var i = entity.enemies.projectiles.x.length - 1; i >= 0; i--) {
+                    // UnLoad the projectile if it goes out of bounds
+                    if (entity.enemies.projectiles.y[i] > HEIGHT) {
+                        unLoadEnemyProjectile(i);
+                    // Check if the enemy projectile is colliding with the player
+                    } else if (entity.enemies.projectiles.x[i] >= entity.player.x - 5 && entity.enemies.projectiles.x[i] <= entity.player.x + 20 && entity.enemies.projectiles.y[i] >= entity.player.y + 5 && entity.enemies.projectiles.y[i] <= entity.player.y + 15 && entity.player.health > 0) {
+                        // Load a medium explosion at where the projectile hit
+                        loadMediumExplosion(entity.enemies.projectiles.x[i], entity.player.y - 5);
+                        // UnLoad the projectile
+                        unLoadEnemyProjectile(i);
+                        // Damage the player
+                        entity.player.health -= 5;
+                        // Play an explosion sound if the player dies
+                        if (entity.player.health <= 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                        }
+                    }
+                }
+                // Health kits
+                for (var i = entity.healthKit.x.length - 1; i >= 0; i--) {
+                    // UnLoad the health kit if it goes out of bounds
+                    if (entity.healthKit.y[i] > HEIGHT) {
+                        unLoadHealthKit(i);
+                    // UnLoad the health kit if the player picks it up
+                    } else if (entity.player.x <= entity.healthKit.x[i] + 15 && entity.player.x + 20 > entity.healthKit.x[i] && entity.player.y <= entity.healthKit.y[i] + 15 && entity.player.y + 20 > entity.healthKit.y[i] && entity.player.health > 0) {
+                        unLoadHealthKit(i);
+                        // Heal the player
+                        entity.player.health += 15;
+                    }
+                }
+                // Enemies
+                for (var i = entity.enemy.x.length - 1; i >= 0; i--) {
+                    // UnLoad the enemy if it goes out of bounds 
+                    if (entity.enemy.y[i] > HEIGHT) {
+                        unLoadEnemy(i);
+                        // Kill the player
+                        if (entity.player.health > 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                            entity.player.health = 0;
+                        }
+                    // Check if the enemy is colliding with the player
+                    } else if (entity.player.x <= entity.enemy.x[i] + entity.enemy.size[i] && entity.player.x + 20 > entity.enemy.x[i] && entity.player.y <= entity.enemy.y[i] + entity.enemy.size[i] && entity.player.y + 20 > entity.enemy.y[i] && entity.player.health > 0) {
+                        // Load an explosion at the enemies position
+                        loadExplosion(entity.enemy.x[i] + entity.enemy.size[i] / 2, entity.enemy.y[i] + entity.enemy.size[i] / 2);
+                        unLoadEnemy(i);
+                        // Damage the player
+                        entity.player.health -= 10;
+                        // Load an explosion if the player dies
+                        if (entity.player.health <= 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                        }
+                    }
+                }
+                // Enemy armour
+                for (var i = entity.enemy.armour.x.length - 1; i >= 0; i--) {
+                    // UnLoad the enemys armour if it goes out of bounds
+                    if (entity.enemy.armour.y[i] > HEIGHT) {
+                        unLoadArmour(i);
+                    // Check if the enemys armour is colliding with the player
+                    } else if (entity.player.x <= entity.enemy.armour.x[i] + entity.enemy.armour.size[i] && entity.player.x + 20 > entity.enemy.armour.x[i] && entity.player.y <= entity.enemy.armour.y[i] + entity.enemy.armour.size[i] && entity.player.y + 20 > entity.enemy.armour.y[i] && entity.player.health > 0) {
+                        // UnLoad the enemys armour
+                        unLoadArmour(i);
+                        // Damage the player
+                        entity.player.health -= 5;
+                        // Load an explosion if the player dies
+                        if (entity.player.health <= 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                        }
+                    }
+                }
+                // Strong enemies
+                for (var i = entity.sEnemy.x.length - 1; i >= 0; i--) {
+                    // UnLoad the strong enemy if it goes out of bounds
+                    if (entity.sEnemy.y[i] > HEIGHT) {
+                        unLoadSEnemy(i);
+                        // Kill the player
+                        if (entity.player.health > 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                            entity.player.health = 0;
+                        }
+                    // Check if the strong enemy is colliding with the player
+                    } else if (entity.player.x <= entity.sEnemy.x[i] + entity.sEnemy.size[i] && entity.player.x + 20 > entity.sEnemy.x[i] && entity.player.y <= entity.sEnemy.y[i] + entity.sEnemy.size[i] && entity.player.y + 20 > entity.sEnemy.y[i] && entity.player.health > 0) {
+                        // Load an explosion at the strong enemies position
+                        loadExplosion(entity.sEnemy.x[i] + entity.sEnemy.size[i] / 2, entity.sEnemy.y[i] + entity.sEnemy.size[i] / 2);
+                        unLoadSEnemy(i);
+                        // Damage the player
+                        entity.player.health -= 15;
+                        // Load an explosion if the player dies
+                        if (entity.player.health <= 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                        }
+                    }
+                }
+                // Strong enemy armour
+                for (var i = entity.sEnemy.armour.x.length - 1; i >= 0; i--) {
+                    // UnLoad the strong enemys armour if it goes out of bounds
+                    if (entity.sEnemy.armour.y[i] > HEIGHT) {
+                        unLoadSArmour(i);
+                    // Check if the strong enemys armour is colliding with the player
+                    } else if (entity.player.x <= entity.sEnemy.armour.x[i] + entity.sEnemy.armour.size[i] && entity.player.x + 20 > entity.sEnemy.armour.x[i] && entity.player.y <= entity.sEnemy.armour.y[i] + entity.sEnemy.armour.size[i] && entity.player.y + 20 > entity.sEnemy.armour.y[i] && entity.player.health > 0) {
+                        // UnLoad the strong enemys armour
+                        unLoadSArmour(i);
+                        // Damage the player
+                        entity.player.health -= 10;
+                        // Load an explosion if the player dies
+                        if (entity.player.health <= 0) {
+                            loadExplosion(entity.player.x + 10, entity.player.y + 10);
+                        }
+                    }
+                }
+                // Small explosions
+                for (var i = entity.smallExplosion.x.length - 1; i >= 0; i--) {
+                    // UnLoad the small explosion if its opacity is zero
+                    if (entity.smallExplosion.opacity[i] <= 0) {
+                        unLoadSmallExplosion(i);
+                    }
+                }
+                // Medium Explosions
+                for (var i = entity.mediumExplosion.x.length - 1; i >= 0; i--) {
+                    // UnLoad the medium explosion if its opacity is zero
+                    if (entity.mediumExplosion.opacity[i] <= 0) {
+                        unLoadMediumExplosion(i);
+                    }
+                }
+                // Large Explosions
+                for (var i = entity.explosion.x.length - 1; i >= 0; i--) {
+                    // Enemies
+                    for (var j = entity.enemy.x.length - 1; j >= 0; j--) {
+                        // UnLoad an enemy if within an explosions radius
+                        if ((Math.sqrt(Math.pow(entity.enemy.x[j] - entity.explosion.x[i], 2) + Math.pow(entity.enemy.y[j] - entity.explosion.y[i], 2))) < entity.explosion.size[i]) {
+                            // Load an explosion at the enemies position
+                            loadExplosion(entity.enemy.x[j] + entity.enemy.size[j] / 2, entity.enemy.y[j] + entity.enemy.size[j] / 2);
+                            unLoadEnemy(j);
+                        }
+                    }
+                    // Enemy armour
+                    for (var j = entity.enemy.armour.x.length - 1; j >= 0; j--) {
+                        // UnLoad an enemies armour if withing an explosions radius
+                        if ((Math.sqrt(Math.pow(entity.enemy.armour.x[j] - entity.explosion.x[i], 2) + Math.pow(entity.enemy.armour.y[j] - entity.explosion.y[i], 2))) < entity.explosion.size[i]) {
+                            entity.player.score += 10;
+                            unLoadArmour(j);
+                        }
+                    }
+                    // Strong Enemy
+                    for (var j = entity.sEnemy.x.length - 1; j >= 0; j--) {
+                        // UnLoad a strong enemy if within an explosions radius
+                        if ((Math.sqrt(Math.pow(entity.sEnemy.x[j] - entity.explosion.x[i], 2) + Math.pow(entity.sEnemy.y[j] - entity.explosion.y[i], 2))) < entity.explosion.size[i]) {
+                            // Load an explosion at the enemies position
+                            loadExplosion(entity.sEnemy.x[j] + entity.sEnemy.size[j] / 2, entity.sEnemy.y[j] + entity.sEnemy.size[j] / 2);
+                            unLoadSEnemy(j);
+                        }
+                    }
+                    // Strong enemy armour
+                    for (var j = entity.sEnemy.armour.x.length - 1; j >= 0; j--) {
+                        // UnLoad a strong enemies armour if withing an explosions radius
+                        if ((Math.sqrt(Math.pow(entity.sEnemy.armour.x[j] - entity.explosion.x[i], 2) + Math.pow(entity.sEnemy.armour.y[j] - entity.explosion.y[i], 2))) < entity.explosion.size[i]) {
+                            entity.player.score += 20;
+                            unLoadSArmour(j);
+                        }
+                    }
+                    // UnLoad the explosion if its size is zero
+                    if (entity.explosion.size[i] <= 0) {
+                        unLoadExplosion(i);
+                    }
+                }
+            }
+            //
+            function drawEntities() {
+                // Shake the screen
+                if (shake.move > 0) {
+                    rumble();
+                }
+                // Draw player projectiles
+                for (var i = 0; i < entity.player.projectile.x.length; i++) {
+                    fill(0, 255, 0, 1);
+                    ellipse(entity.player.projectile.x[i], entity.player.projectile.y[i], entity.player.projectile.radius);
+                    // Move player projectile
+                    entity.player.projectile.y[i] -= 8;
+                }
+                // Draw enemy projectiles
+                for (var i = 0; i < entity.enemies.projectiles.x.length; i++) {
+                    fill(255, 0, 0, 1);
+                    ellipse(entity.enemies.projectiles.x[i], entity.enemies.projectiles.y[i], entity.enemies.projectiles.radius);
+                    // Move enemy projectile
+                    entity.enemies.projectiles.y[i] += 6;
+                }
+                // Draw health kits
+                for (var i = 0; i < entity.healthKit.x.length; i++) {
+                    ctx.drawImage(healthKit, entity.healthKit.x[i], entity.healthKit.y[i], 15, 15);
+                    // Move health kit
+                    entity.healthKit.y[i] += 0.5;
+                }
+                // Draw the player if it is alive
+                if (entity.player.health > 0) {
+                    fill(0, 0, 255, 1);
+                    ctx.drawImage(shipImage, entity.player.x - 2.5, entity.player.y, 20, 20);
+                }
+                // Draw enemies and make them shoot randomly
+                for (var i = 0; i < entity.enemy.x.length; i++) {
+                    var randNum = Math.floor(Math.random() * 750) + 1;
+                    if (randNum % 750 === 0) {
+                        loadEnemyProjectile(entity.enemy.x[i] + entity.enemy.size[i] / 2, entity.enemy.y[i] + entity.enemy.size[i]);
+                    }
+                    fill(entity.enemy.health[i] * (255 / entity.enemy.initHealth[i]), -(entity.enemy.health[i] * (255 / entity.enemy.initHealth[i])), entity.enemy.health[i] * (255 / entity.enemy.initHealth[i]), 1);
+                    rect(entity.enemy.x[i] + 1, entity.enemy.y[i] + 1, entity.enemy.size[i] - 2, entity.enemy.size[i] - 2);
+                    ctx.drawImage(enemyTexture, entity.enemy.x[i], entity.enemy.y[i], entity.enemy.size[i], entity.enemy.size[i]);
+                    // Move enemy
+                    entity.enemy.y[i] += 0.375;
+                }
+                // Draw enemy armour
+                for (var i = 0; i < entity.enemy.armour.x.length; i++) {
+                    fill(-(entity.enemy.armour.health[i] * (255 / entity.enemy.armour.initHealth[i])), entity.enemy.armour.health[i] * (255 / entity.enemy.armour.initHealth[i]), entity.enemy.armour.health[i] * (255 / entity.enemy.armour.initHealth[i]), 1);
+                    rect(entity.enemy.armour.x[i] + 1, entity.enemy.armour.y[i] + 1, entity.enemy.armour.size[i] - 2, entity.enemy.armour.size[i] - 2);
+                    ctx.drawImage(enemyArmourTexture, entity.enemy.armour.x[i], entity.enemy.armour.y[i], entity.enemy.armour.size[i], entity.enemy.armour.size[i]);
+                    entity.enemy.armour.y[i] += 0.375;
+                }
+                // Draw srong enemies and make them shoot randomly
+                for (var i = 0; i < entity.sEnemy.x.length; i++) {
+                    var randNum = Math.floor(Math.random() * 250) + 1;
+                    if (randNum % 250 === 0) {
+                        loadEnemyProjectile(entity.sEnemy.x[i] + entity.sEnemy.size[i] / 2, entity.sEnemy.y[i] + entity.sEnemy.size[i]);
+                    }
+                    fill(entity.sEnemy.health[i] * (255 / entity.sEnemy.initHealth[i]), -(entity.sEnemy.health[i] * (255 / entity.sEnemy.initHealth[i])), -(entity.sEnemy.health[i] * (255 / entity.sEnemy.initHealth[i])), 1);
+                    rect(entity.sEnemy.x[i] + 1, entity.sEnemy.y[i] + 1, entity.sEnemy.size[i] - 2, entity.sEnemy.size[i] - 2);
+                    ctx.drawImage(enemyTexture, entity.sEnemy.x[i], entity.sEnemy.y[i], entity.sEnemy.size[i], entity.sEnemy.size[i]);
+                    // Move strong enemy
+                    entity.sEnemy.y[i] += 0.375;
+                }
+                // Draw strong enemy armour
+                for (var i = 0; i < entity.sEnemy.armour.x.length; i++) {
+                    fill(entity.sEnemy.armour.health[i] * (255 / entity.sEnemy.armour.initHealth[i]), entity.sEnemy.armour.health[i] * (255 / entity.sEnemy.armour.initHealth[i]), -(entity.sEnemy.armour.health[i] * (255 / entity.sEnemy.armour.initHealth[i])), 1);
+                    rect(entity.sEnemy.armour.x[i] + 1, entity.sEnemy.armour.y[i] + 1, entity.sEnemy.armour.size[i] - 2, entity.sEnemy.armour.size[i] - 2);
+                    ctx.drawImage(enemyArmourTexture, entity.sEnemy.armour.x[i], entity.sEnemy.armour.y[i], entity.sEnemy.armour.size[i], entity.sEnemy.armour.size[i]);
+                    entity.sEnemy.armour.y[i] += 0.375;
+                }
+                // Draw the players health bar if the player is alive
+                if (entity.player.health > 0) {
+                    fill(255, 0, 0, 1);
+                    rect(entity.player.x - 10, entity.player.y + 25, 100 * 0.33, 5);
+                    fill(0, 255, 0, 1);
+                    rect(entity.player.x - 10, entity.player.y + 25, entity.player.health * 0.33, 5);
+                }
+                // Draw small explosions
+                for (var i = 0; i < entity.smallExplosion.x.length; i++) {
+                    fill(0, 255, 0, entity.smallExplosion.opacity[i]);
+                    ellipse(entity.smallExplosion.x[i], entity.smallExplosion.y[i], entity.smallExplosion.size[i]);
+                    // Make the small explosion bigger
+                    entity.smallExplosion.size[i]++;
+                    // Lower the small explosions opacity
+                    entity.smallExplosion.opacity[i] -= 0.1;
+                }
+                // Draw medium explosions
+                for (var i = 0; i < entity.mediumExplosion.x.length; i++) {
+                    fill(255, 0, 0, entity.mediumExplosion.opacity[i]);
+                    ellipse(entity.mediumExplosion.x[i], entity.mediumExplosion.y[i], entity.mediumExplosion.size[i]);
+                    // Make the medium explosion bigger
+                    entity.mediumExplosion.size[i] += 2;
+                    // Lower the medium explosions opacity
+                    entity.mediumExplosion.opacity[i] -= 0.1;
+                }
+                for (var i = 0; i < entity.explosion.x.length; i++) {
+                    fill(255, 110, 0, 0.9);
+                    ellipse(entity.explosion.x[i], entity.explosion.y[i], entity.explosion.size[i]);
+                    // Lower the explosions size
+                    entity.explosion.size[i] -= 5;
+                }
+                // Draw the players score if they are alive
+                if (entity.player.health > 0) {
+                    fill(0, 255, 0, 0.9);
+                    textSize(25);
+                    text(entity.player.score.toLocaleString(undefined, {minimumFractionDigits: 0}), 15, 35);
+                }
+                // Lowers the hit sound cooldown (So no sound overlaps)
+                if (hSCoolDown > 0) {
+                    hSCoolDown--;
+                }
+            }
+            // Runs the game
+            function runGame() {
+                // Check that the players health isnt in the negatives
+                if (entity.player.health < 0) {
+                    entity.player.health = 0;
+                // Check that the players health isnt over 100
+                } else if (entity.player.health > 100) {
+                    entity.player.health = 100;
+                }
+                spawnEnemy();
+                collisionDetection();
+                drawEntities();
+                // Draw the game over screen
+                if (entity.player.health <= 0) {
+                    fill(255, 0, 0, 1);
+                    ctx.textAlign = "center";
+                    textSize(50);
+                    text("Game Over", 200, 300),
+                    textSize(20);
+                    text("You scored " + entity.player.score.toLocaleString(undefined, {minimumFractionDigits: 0}) + " points", 200, 350);
+                    ctx.textAlign = "left";
+                } else {
+                    shoot(6);
+                    movePlayer(3);
+                }
+            }
+            // Draws the menu screen
+            function runMenu() {
+                // Makes the "Click to start" text flash
+                if (timer >= 45) {
+                    if (opacity === 1) {
+                        opacity = 0;
+                    } else {
+                        opacity = 1;
+                    }
+                    timer = 0;
+                }
+                timer++;
+                ctx.drawImage(logo, 50, 200, 300, 100);
+                fill(0, 255, 0, opacity);
+                textSize(20);
+                text("Click to Start", 145, 310);
+            }
+            // The main method
+            function draw() {
+                setTimeout(function () {
+                    ctx.drawImage(backGround, 0, 0, WIDTH, HEIGHT);
+                    if (run.menu) { // Run menu
+                        runMenu();
+                    } else if (run.game) { // Run game
+                        runGame();
+                    }
+                    // Draws the outer border of the game space
+                    fill(0, 216, 255, 0.7);
+                    rect(0, 0, WIDTH, 5); // Top
+                    rect(0, HEIGHT - 5, WIDTH, 5); // Bottom
+                    rect(WIDTH - 5, 5, 5, HEIGHT - 10); // Right
+                    rect(0, 5, 5, HEIGHT - 10); // Left
+                    requestAnimationFrame(draw);
+                }, 1000 / 60);
+            }
+            //
+            window.addEventListener("load", init);
+            canvas.addEventListener("click", mouseClicked);
+            canvas.addEventListener("keyup", onKeyUp);
+            canvas.addEventListener("keydown", onKeyDown);
+        </script>
+    </body>
+</html>
